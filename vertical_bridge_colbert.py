@@ -26,6 +26,7 @@ from ragatouille import RAGPretrainedModel
 from collections import defaultdict,OrderedDict
 import vb_parser as pypar
 import vb_prompts as pty
+from json import JSONDecodeError
 
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
@@ -55,7 +56,7 @@ def download(filename):
     safe_path=filename
     return send_file(safe_path,as_attachment=True)
 
-def remove_single_quotes_outside_substrings(s, substrings):
+def remove_single_quotes_outside_substrings(s, substrings,logfile):
     try:  
         # Use a list to build the resulting string
         result = []
@@ -88,43 +89,36 @@ def remove_single_quotes_outside_substrings(s, substrings):
         return None
 
 
-def convert_to_dict(dict_str):
+def convert_to_dict(dict_str,logfile):
     try:
-        print('old str',dict_str)
         substrings_to_allow = ["'{'", "'}'", "':'", "','", "''", "' '","' {'","'} ,","' :'","': '","', '","' ,'","{'","'}"]
         single_quotes_and_apostrophes = ["‘", "’", "'", "’", "’"]
         
         # Replace each type of single quote and apostrophe with the straight single quote (')
         for char in single_quotes_and_apostrophes:
-            dict_str = dict_str.replace(char, "'")
-        new_str = remove_single_quotes_outside_substrings(dict_str, substrings_to_allow)
-        print('new str',new_str)
-        json_string = new_str.replace("'", '"')
+            if isinstance(dict_str, str):
+                print("dict_str : ",dict_str,type(dict_str))
+                dict_str = dict_str.replace(char, "'")
+        if isinstance(dict_str, str):
+            new_str = remove_single_quotes_outside_substrings(dict_str, substrings_to_allow,logfile)
+            print('new str',new_str)
+            json_string = new_str.replace("'", '"')
+        else:
+            if isinstance(dict_str, dict):
+                json_string = dict_str
         # Convert the cleaned string to a dictionary
         try:
             return json.loads(json_string)
         except (json.JSONDecodeError, TypeError) as e:
             print(f"Error converting string to dictionary: {e}")
-            log_exception(e, "In app.py wordCordinates", logfile)
-            with open(textfile, 'a', encoding='utf-8') as fp:
-                fp.write('old str.........')
-                fp.write('\n\n')
-                fp.writelines(dict_str)
-                fp.write('\n\n')
-                fp.write('New str.........')
-                fp.write('\n\n')
-                fp.writelines(new_str)
-                fp.write('\n\n')
-                fp.write('##################################')
-                fp.write('\n\n\n')
-                
+            log_exception(e, "In app.py wordCordinates", logfile)               
             
             return None
     except Exception as e:
         log_exception(e, "In vertical_bridge_colbert.py convert_to_dict", logfile)
         return None
 
-def generate_key(index):
+def generate_key(index,logfile):
     try:
         alphabet = string.ascii_lowercase
         base = len(alphabet)
@@ -138,7 +132,7 @@ def generate_key(index):
         log_exception(e, "In vertical_bridge_colbert.py generate_key", logfile)
         return key
     
-def merge_paragraphs(blocks, line_spacing_threshold):
+def merge_paragraphs(blocks, line_spacing_threshold,logfile):
     try:   
         paragraphs = []
         current_paragraph = ""
@@ -161,19 +155,22 @@ def merge_paragraphs(blocks, line_spacing_threshold):
         log_exception(e, "In vertical_bridge_colbert.py merge_paragraphs", logfile)
         return paragraphs
 
-def extract_paragraphs_from_pdf(pdf_path, header_threshold=20, line_spacing_threshold=5):
+def extract_paragraphs_from_pdf(pdf_path,logfile):
     all_paragraphs = []
+    header_threshold=20
+    line_spacing_threshold=5
     
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for page_num, page in enumerate(pdf.pages):
+            #for page_num, page in enumerate(range(5)):
                 page_height = page.height
                 # Extract words with positions
                 blocks = page.extract_words()
                 # Filter out potential headers based on a threshold
                 filtered_blocks = [block for block in blocks if not block['top'] < header_threshold ]
                 # Merge paragraphs
-                paragraphs = merge_paragraphs(filtered_blocks, line_spacing_threshold)
+                paragraphs = merge_paragraphs(filtered_blocks, line_spacing_threshold,logfile)
                 # Add page number to each paragraph
                 for para in paragraphs:
                     all_paragraphs.append({
@@ -187,7 +184,7 @@ def extract_paragraphs_from_pdf(pdf_path, header_threshold=20, line_spacing_thre
     return all_paragraphs
 
 
-def split_paragraph(paragraph, text_splitter):
+def split_paragraph(paragraph, text_splitter,logfile):
     try: 
         # Create a Document object
         document = Document(page_content=paragraph)
@@ -207,7 +204,7 @@ def split_paragraph(paragraph, text_splitter):
         log_exception(e, "In vertical_bridge_colbert.py split_paragraph", logfile)
 
     
-def findResponses(query,text):
+def findResponses(query,text,logfile):
     try:  
         response = llm_model.generate(
                 prompts=[f"Query: {query}\nYText: {text}"]
@@ -216,7 +213,7 @@ def findResponses(query,text):
     except Exception as e:
         log_exception(e, "In vertical_bridge_colbert.py split_paragraph", logfile)
 
-def mergeJson(result):
+def mergeJson(result,logfile):
     try: 
         output=[]
         for data in result:
@@ -227,7 +224,7 @@ def mergeJson(result):
     except Exception as e:
         log_exception(e, "In vertical_bridge_colbert.py mergeJson", logfile)
 
-def is_valid(s):
+def is_valid(s,blocklist,logfile):
     try:   
         # Filter out non-alphabetic characters and check if the rest are uppercase
         alphabetic_chars = ''.join(filter(str.isalpha, s))
@@ -236,11 +233,11 @@ def is_valid(s):
         log_exception(e, "In vertical_bridge_colbert.py is_valid", logfile)
     
 
-def extract_entities(pdf_file_path):
+def extract_entities(pdf_file_path,logfile):
     filename = os.path.basename(pdf_file_path)
     basename, _ = os.path.splitext(filename)
     answerfile = 'answer_for_3.1_new' + basename+'.json'
-    paragraphs = extract_paragraphs_from_pdf(pdf_file_path)
+    paragraphs = extract_paragraphs_from_pdf(pdf_file_path,logfile)
     file_entities = []
     text_splitter = RecursiveCharacterTextSplitter(separators=["\n\n", "\n"], chunk_size=3500, chunk_overlap=150)
     
@@ -261,7 +258,7 @@ def extract_entities(pdf_file_path):
     blocklist = ['BETWEEN','INBETWEEN','AMONG','WITH','AND','TENANT','LANDLORD']
     try: 
         for para in paragraphs:
-            if para['text'].isupper() and is_valid(para['text']):
+            if para['text'].isupper() and is_valid(para['text'],blocklist,logfile):
                 if upper == 1:
                     if current_head == None:
                         current_head = outer_head
@@ -361,11 +358,11 @@ def extract_entities(pdf_file_path):
                     section_text += '\n' + section_text
             elif len(section_text) > MAX_PARAGRAPH_LENGTH:
                 # Split the paragraph into chunks and update the dictionary
-                chunks = split_paragraph(section_text, text_splitter)
+                chunks = split_paragraph(section_text, text_splitter, logfile)
                 # Remove the original entry
                 # Add the chunks to the dictionary with new keys
                 for index, chunk in enumerate(chunks):
-                    new_key = f"{key}{generate_key(index)}"
+                    new_key = f"{key}{generate_key(index,logfile)}"
                     com_dict[new_key] = {
                         'section': chunk.page_content,
                         'page_no': com_dict[key]['page_no']
@@ -410,8 +407,6 @@ def extract_entities(pdf_file_path):
         log_exception(e, "In vertical_bridge_colbert.py extract_entities -- after com_dict assiging till rag indexing", logfile)
     for i in range(len(queries)):
         try:
-            
-            print('i',i)
             query = queries[i]
             all_pages = []
             all_unique_pages = []
@@ -428,7 +423,7 @@ def extract_entities(pdf_file_path):
                     
             unique_pages = list(OrderedDict.fromkeys(all_pages))
             top_5_pages = unique_pages[:5]
-            print('top_5_pages',top_5_pages)
+            #print('top_5_pages',top_5_pages)
             model_answer = []
             ct = 1
             entity_answer = []
@@ -466,47 +461,100 @@ def extract_entities(pdf_file_path):
                             f"Question: {model_queries[i]}\n\n"
                         )
 
-            print('Lenght model text',len(final_text))
-            print('Lenght of model text words',len(final_text.split(' ')))
+            #print('Lenght model text',len(final_text))
+            #print('Lenght of model text words',len(final_text.split(' ')))
         except Exception as e:
             log_exception(e, "In vertical_bridge_colbert.py extract_entities -- after rag indexing till prompting", logfile)
-        try :
+        try:
             ollama_result = chain.invoke({"query_text": query_text})
             
             try:
                 entity_answer.append(ollama_result)
             except Exception as e:
                 log_exception(e, "In vertical_bridge_colbert.py extract_entities -- parser model result appending", logfile)
+
         except Exception as e:
             log_exception(e, "In vertical_bridge_colbert.py extract_entities -- parser model not worked", logfile)
-            try:    
-                res = findResponses(model_prompt,final_text)
+
+            try:
+                print("final_text : ", final_text)
+                res = findResponses(model_prompt, final_text, logfile)
                 for generation_chunk in res.generations:
                     for generation in generation_chunk:
                         ollama_result = generation.text
             except Exception as e:
                 ollama_result = 'None'
-                log_exception(e, "In vertical_bridge_colbert.py extract_entities --  model not worked", logfile)
-            try:
+                log_exception(e, "In vertical_bridge_colbert.py extract_entities -- model not worked", logfile)
+
+        # Skipping invalid JSON
+        try:
+            
+            if isinstance(ollama_result, str):
                 json_string = ollama_result.replace("'", '"')
                 json_loads = json.loads(json_string)
                 entity_answer.append(json_loads)
+
+            elif isinstance(ollama_result, dict):
+                    json_string = ollama_result
+                    #json_loads = json.loads(json_string)
+                    entity_answer.append(json_string)
+            
+                
+        except JSONDecodeError as e:
+            log_exception(e, "In vertical_bridge_colbert.py extract_entities -- JSONDecodeError, skipping this json", logfile)
+            # Skip invalid JSON and continue to the next one
+        except Exception as e:
+            log_exception(e, "In vertical_bridge_colbert.py extract_entities -- Other model answer json loads error", logfile)
+            try:
+                response_dict = convert_to_dict(ollama_result, logfile)
+                entity_answer.append(response_dict)
             except Exception as e:
-                log_exception(e, "In vertical_bridge_colbert.py extract_entities --  model answer json loads error ", logfile)
-                try :
-                    response_dict = convert_to_dict(ollama_result)
-                    entity_answer.append(response_dict)
+                log_exception(e, "In vertical_bridge_colbert.py extract_entities -- model answer json conversion error", logfile)
+                try:
+                    entity_answer.append(ollama_result)
                 except Exception as e:
-                    log_exception(e, "In vertical_bridge_colbert.py extract_entities --  model answer json conversion error", logfile)
-                    try:
-                        entity_answer.append(ollama_result)
-                    except Exception as e :
-                        log_exception(e, "In vertical_bridge_colbert.py extract_entities --  Nothing worked at model calling ", logfile)
-                        print('Can not add',e)
-                        entity_answer.append("")
+                    log_exception(e, "In vertical_bridge_colbert.py extract_entities -- Nothing worked at model calling", logfile)
+                    print('Cannot add', e)
+                    entity_answer.append("")
+##        try :
+##            ollama_result = chain.invoke({"query_text": query_text})
+##            
+##            try:
+##                entity_answer.append(ollama_result)
+##            except Exception as e:
+##                log_exception(e, "In vertical_bridge_colbert.py extract_entities -- parser model result appending", logfile)
+##        except Exception as e:
+##            log_exception(e, "In vertical_bridge_colbert.py extract_entities -- parser model not worked", logfile)
+##            try:
+##                print("final_text : ",final_text)
+##                res = findResponses(model_prompt,final_text,logfile)
+##                for generation_chunk in res.generations:
+##                    for generation in generation_chunk:
+##                        ollama_result = generation.text
+##            except Exception as e:
+##                ollama_result = 'None'
+##                log_exception(e, "In vertical_bridge_colbert.py extract_entities --  model not worked", logfile)
+##            try:
+##                json_string = ollama_result.replace("'", '"')
+##                json_loads = json.loads(json_string)
+##                entity_answer.append(json_loads)
+##            except Exception as e:
+##                log_exception(e, "In vertical_bridge_colbert.py extract_entities --  model answer json loads error ", logfile)
+##                try :
+##                    response_dict = convert_to_dict(ollama_result,logfile)
+##                    entity_answer.append(response_dict)
+##                except Exception as e:
+##                    log_exception(e, "In vertical_bridge_colbert.py extract_entities --  model answer json conversion error", logfile)
+##                    try:
+##                        entity_answer.append(ollama_result)
+##                    except Exception as e :
+##                        log_exception(e, "In vertical_bridge_colbert.py extract_entities --  Nothing worked at model calling ", logfile)
+##                        print('Can not add',e)
+##                        entity_answer.append("")
             
         print('entity_answer ',entity_answer)
-        print('###################################'+'\n\n')
+        print('#'*150)
+        print()
     try:
                 
         # Write the JSON data to a file
@@ -516,8 +564,8 @@ def extract_entities(pdf_file_path):
         print(f"Data successfully written to {answerfile}")
         try:
             result=json.loads(open(answerfile,"r").read())
-            output = mergeJson(result)
-            print('output flattened')
+            output = mergeJson(result,logfile)
+            #print('output flattened')
             for entity_output in output :
                 if('Position' in entity_output):
                     entity_output['Position'] = list(OrderedDict.fromkeys(entity_output['Position']))
@@ -558,15 +606,16 @@ def upload():
 @app.route('/start_Rag',methods=['GET', 'POST'])
 def start_Rag():
     try:
+        all_data = []
         if request.method == 'GET':
             return render_template('upload.html')
-        
         start = datetime.now()
         uuidName=str(uuid.uuid4())
         logfile = f"logs/{uuidName}.txt"
+        print("logfile : ",logfile)
+        processLogger("started",logfile)
         os.mkdir(f"PDFFILE/{uuidName}")
         download_directory = f"PDFFILE/{uuidName}"
-        print('download_directory : ',download_directory)
         files = request.files.getlist('files[]')
 
         for file in files:
@@ -587,14 +636,8 @@ def start_Rag():
             pdf_path = os.path.join(check_pdf,file_name)
             basename, _ = os.path.splitext(file_name)
             print(f'Processing file: {pdf_path}')
-            final_answers = extract_entities(pdf_path)
-            print('flatten ',final_answers)
-            '''df_dict = {
-                'Entity_Name':[],
-                'Entity':[],
-                'Position':[],
-                'Page':[]
-            }'''
+            final_answers = extract_entities(pdf_path,logfile)
+            all_data.append(final_answers)
             for answers in final_answers :
                 entity_name = []
                 entity =[]
@@ -622,6 +665,9 @@ def start_Rag():
                     df_dict['Entity'].append(entity[i])
                     df_dict['Position'].append(position)
                     df_dict['Page'].append(page)
+        jsonFile = f"PDFFILE/{uuidName}.json"
+        with open(jsonFile,'w') as f:
+            json.dump(all_data,f,indent=4)
         Id  = request.args.get('Id')
         df = pd.DataFrame(df_dict)
         grouped_df = df.groupby('Entity_Name').apply(lambda x: x).reset_index(drop=True)
@@ -629,7 +675,6 @@ def start_Rag():
         excel_name = uuidName + "_data.xlsx"
         excelFilePath = os.path.join(download_directory,excel_name)
         grouped_df.to_excel(excelFilePath,index = False)
-        print('\n\n')
         end = datetime.now()
         print("total time : ",end-start)
         return redirect(url_for('download',filename=excelFilePath))
