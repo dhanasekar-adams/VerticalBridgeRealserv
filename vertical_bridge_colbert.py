@@ -467,17 +467,17 @@ def extract_entities(pdf_file_path,logfile):
             log_exception(e, "In vertical_bridge_colbert.py extract_entities -- after rag indexing till prompting", logfile)
         try:
             ollama_result = chain.invoke({"query_text": query_text})
-            
-            try:
-                entity_answer.append(ollama_result)
-            except Exception as e:
-                log_exception(e, "In vertical_bridge_colbert.py extract_entities -- parser model result appending", logfile)
+            entity_answer.append(ollama_result)
+##            try:
+##                entity_answer.append(ollama_result)
+##            except Exception as e:
+##                log_exception(e, "In vertical_bridge_colbert.py extract_entities -- parser model result appending", logfile)
 
         except Exception as e:
             log_exception(e, "In vertical_bridge_colbert.py extract_entities -- parser model not worked", logfile)
-
+            print("error parser model:",e)
             try:
-                print("final_text : ", final_text)
+                #print("final_text : ", final_text)
                 res = findResponses(model_prompt, final_text, logfile)
                 for generation_chunk in res.generations:
                     for generation in generation_chunk:
@@ -485,6 +485,7 @@ def extract_entities(pdf_file_path,logfile):
             except Exception as e:
                 ollama_result = 'None'
                 log_exception(e, "In vertical_bridge_colbert.py extract_entities -- model not worked", logfile)
+                print("error parser model:",e)
 
         # Skipping invalid JSON
         try:
@@ -501,20 +502,23 @@ def extract_entities(pdf_file_path,logfile):
             
                 
         except JSONDecodeError as e:
+            print('JSONDecodeError', e)
             log_exception(e, "In vertical_bridge_colbert.py extract_entities -- JSONDecodeError, skipping this json", logfile)
             # Skip invalid JSON and continue to the next one
         except Exception as e:
+            print('Cannot add1', e)
             log_exception(e, "In vertical_bridge_colbert.py extract_entities -- Other model answer json loads error", logfile)
             try:
                 response_dict = convert_to_dict(ollama_result, logfile)
                 entity_answer.append(response_dict)
             except Exception as e:
                 log_exception(e, "In vertical_bridge_colbert.py extract_entities -- model answer json conversion error", logfile)
+                print('Cannot add2', e)
                 try:
                     entity_answer.append(ollama_result)
                 except Exception as e:
                     log_exception(e, "In vertical_bridge_colbert.py extract_entities -- Nothing worked at model calling", logfile)
-                    print('Cannot add', e)
+                    print('Cannot add3', e)
                     entity_answer.append("")
 ##        try :
 ##            ollama_result = chain.invoke({"query_text": query_text})
@@ -552,9 +556,9 @@ def extract_entities(pdf_file_path,logfile):
 ##                        print('Can not add',e)
 ##                        entity_answer.append("")
             
-        print('entity_answer ',entity_answer)
-        print('#'*150)
-        print()
+##        print('entity_answer ',entity_answer)
+##        print('#'*150)
+##        print()
     try:
                 
         # Write the JSON data to a file
@@ -668,6 +672,7 @@ def start_Rag():
         jsonFile = f"PDFFILE/{uuidName}.json"
         with open(jsonFile,'w') as f:
             json.dump(all_data,f,indent=4)
+        print('all_data : \n',all_data)
         Id  = request.args.get('Id')
         df = pd.DataFrame(df_dict)
         grouped_df = df.groupby('Entity_Name').apply(lambda x: x).reset_index(drop=True)
