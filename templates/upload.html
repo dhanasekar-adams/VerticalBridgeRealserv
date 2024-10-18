@@ -37,7 +37,12 @@
         /* Loading circle styles */
         #loading {
             display: none; /* Hidden by default */
-            margin-top: 20px;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* Center horizontally and vertically */
+            text-align: center;
+            z-index: 9999; /* Ensure it appears above other content */
         }
 
         .loader {
@@ -57,8 +62,8 @@
 </head>
 <body>
     <h1>Upload PDF Documents</h1>
-    <form action="/start_Rag" method="post" enctype="multipart/form-data" onsubmit="showLoading()">
-        <input type="file" name="files[]" accept=".pdf" multiple required>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" id="fileInput" name="files[]" accept=".pdf" multiple required>
         <button type="submit">Upload</button>
     </form>
 
@@ -67,5 +72,41 @@
         <div class="loader"></div>
         <p>Uploading, please wait...</p>
     </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            // Show the loading circle when the upload begins
+            document.getElementById('loading').style.display = 'block';
+
+            const form = event.target;
+            const formData = new FormData(form);
+
+            try {
+                // Send the form data using Fetch API
+                const response = await fetch('/start_Rag', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    const data = await response.json(); // Assume the server returns JSON with redirect info
+                    const downloadUrl = data.redirect_url; // Example: { "redirect_url": "/download/filename" }
+                    
+                    // Redirect to download URL
+                    window.location.href = downloadUrl;
+                } else {
+                    alert('File upload failed!');
+                }
+            } catch (error) {
+                console.error('Error during file upload:', error);
+                alert('An error occurred!');
+            } finally {
+                // Hide loading circle after upload completes (or fails)
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>
